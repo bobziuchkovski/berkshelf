@@ -1,3 +1,5 @@
+require 'find'
+
 module Berkshelf
   class Berksfile
     class << self
@@ -28,7 +30,6 @@ module Berkshelf
       def vendor(cookbooks, path)
         chefignore = nil
         path       = File.expand_path(path)
-        scratch    = Berkshelf.mktmpdir
 
         FileUtils.mkdir_p(path)
 
@@ -37,21 +38,20 @@ module Berkshelf
         end
 
         cookbooks.each do |cb|
-          dest = File.join(scratch, cb.cookbook_name, '/')
+          dest = File.join(path, cb.cookbook_name, '/')
+
+          # Remove and recreate destination cookbook path
+          FileUtils.rm_r dest, force: true, secure: true
           FileUtils.mkdir_p(dest)
 
-          # Dir.glob does not support backslash as a File separator
-          src = cb.path.to_s.gsub('\\', '/')
-          files = Dir.glob(File.join(src, '*'))
+          # Process source cookbook path recursively
+          files = Find.find(cb.path).to_a
 
           # Filter out files using chefignore
           files = chefignore.remove_ignores_from(files) if chefignore
 
           FileUtils.cp_r(files, dest)
         end
-
-        FileUtils.remove_dir(path, force: true)
-        FileUtils.mv(scratch, path)
 
         path
       end
