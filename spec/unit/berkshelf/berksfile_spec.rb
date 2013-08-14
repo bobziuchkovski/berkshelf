@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'find'
 
 describe Berkshelf::Berksfile do
   describe '.from_file' do
@@ -38,34 +39,40 @@ describe Berkshelf::Berksfile do
 
   describe '.vendor' do
     let(:cached_cookbooks) { [] }
-    let(:tmpdir) { Dir.mktmpdir(nil, tmp_path) }
+
+    # Ensure fresh directory
+    before do
+      @tmpdir = Dir.mktmpdir(nil, tmp_path)
+    end
 
     it 'returns the expanded filepath of the vendor directory' do
-      expect(Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)).to eql(tmpdir)
+      expect(Berkshelf::Berksfile.vendor(cached_cookbooks, @tmpdir)).to eql(@tmpdir)
     end
 
     it 'retains destination directory' do
-      dest_inode = File.stat(tmpdir).ino
-      Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)
-      expect(File.stat(tmpdir).ino).to eql(dest_inode)
+      dest_inode = File.stat(@tmpdir).ino
+      Berkshelf::Berksfile.vendor(cached_cookbooks, @tmpdir)
+      expect(File.stat(@tmpdir).ino).to eql(dest_inode)
     end
 
     context 'with a chefignore' do
       before do
-        File.stub(:exists?).and_return(true)
-        Berkshelf::Chef::Cookbook::Chefignore.any_instance.stub(:remove_ignores_from).and_return(['metadata.rb'])
+        retain = [fixtures_path.join('cookbooks/example_cookbook/metadata.rb')]
+        Berkshelf::Chef::Cookbook::Chefignore.stub(:find_relative_to).and_return('chefignore')
+        Berkshelf::Chef::Cookbook::Chefignore.any_instance.stub(:remove_ignores_from).and_return(retain)
       end
 
       it 'finds a chefignore file' do
-        Berkshelf::Chef::Cookbook::Chefignore.should_receive(:new).with(File.expand_path('chefignore'))
-        Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)
+        Berkshelf::Chef::Cookbook::Chefignore.should_receive(:new).with('chefignore')
+        Berkshelf::Berksfile.vendor(cached_cookbooks, @tmpdir)
       end
 
       it 'removes files in chefignore' do
         cached_cookbooks = [ Berkshelf::CachedCookbook.from_path(fixtures_path.join('cookbooks/example_cookbook')) ]
-        FileUtils.should_receive(:cp_r).with(['metadata.rb'], anything()).exactly(1).times
-        FileUtils.should_receive(:cp_r).with(anything(), anything(), anything()).once
-        Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)
+        Berkshelf::Berksfile.vendor(cached_cookbooks, @tmpdir)
+        files = Find.find(@tmpdir).to_a.delete_if { |path| File.directory?(path) }
+        expect(files.length).to eql(1)
+        expect(File.basename(files[0])).to eql('metadata.rb')
       end
     end
   end
