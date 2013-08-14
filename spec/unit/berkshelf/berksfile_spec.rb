@@ -44,6 +44,12 @@ describe Berkshelf::Berksfile do
       expect(Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)).to eql(tmpdir)
     end
 
+    it 'retains destination directory' do
+      dest_inode = File.stat(tmpdir).ino
+      Berkshelf::Berksfile.vendor(cached_cookbooks, tmpdir)
+      expect(File.stat(tmpdir).ino).to eql(dest_inode)
+    end
+
     context 'with a chefignore' do
       before do
         File.stub(:exists?).and_return(true)
